@@ -9,3 +9,5 @@ kernel.elf
 .cache
 compiler_commands.json
 fs.img
+__pycache__/
+*.pyc

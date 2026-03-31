@@ -27,6 +27,9 @@ int pipe(int fd[2]);
 int mkdir(const char *path);
 int unlink(const char *path);
 int link(const char *oldpath, const char *newpath);
+int dup2(int oldfd, int newfd);
+int getcwd(char *buf, int max);
+int printf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 
 // user library helpers
 int stat(const char *path, struct stat *st);
@@ -45,6 +48,5 @@ int memcmp(const void *a, const void *b, uint n);
 // printf-style output helpers
 void vprintf(int fd, const char *fmt, va_list ap);
 void fprintf(int fd, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
-void printf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 
 #endif

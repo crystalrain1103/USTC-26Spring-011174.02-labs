@@ -96,3 +96,13 @@ int unlink(const char *path) {
 int link(const char *oldpath, const char *newpath) {
     return (int)__syscall(SYS_link, (long)oldpath, (long)newpath, 0);
 }
+
+
+
+int dup2(int oldfd, int newfd) {
+    return (int)__syscall(SYS_dup2, oldfd, newfd, 0);
+}
+
+int getcwd(char *buf, int max) {
+    return (int)__syscall(SYS_getcwd, (long)buf, max, 0);
+}
