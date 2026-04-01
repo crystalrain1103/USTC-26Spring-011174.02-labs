@@ -560,6 +560,16 @@ static uint64 sys_kill(void) {
     return (uint64)kill(pid);
 }
 
+static uint64 sys_hello_id(void) {
+    struct proc *p = myproc();
+    if (p == 0) {
+        return (uint64) - 1;
+    }
+    int tag = (int)p->trapframe->a0;
+    printf("[sys_hello_id] pid=%d, tag=%d\n", p->pid, tag);
+    return (uint64)tag;
+}
+
 static int fdalloc(struct file *f) {
     struct proc *p = myproc();
     for (int i = 0; i < NOFILE; i++) {
@@ -631,6 +641,7 @@ static uint64 (*syscalls[])(void) = {
     [SYS_mkdir] = sys_mkdir,
     [SYS_unlink] = sys_unlink,
     [SYS_link] = sys_link,
+    [SYS_hello_id] = sys_hello_id,
 };
 
 void syscall(void) {

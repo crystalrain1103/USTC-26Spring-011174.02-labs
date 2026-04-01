@@ -81,6 +81,10 @@ int kill(int pid) {
     return (int)__syscall(SYS_kill, pid, 0, 0);
 }
 
+int hello_id(int tag) {
+    return (int)__syscall(SYS_hello_id, tag, 0, 0);
+}
+
 int pipe(int fd[2]) {
     return (int)__syscall(SYS_pipe, (long)fd, 0, 0);
 }
