@@ -176,6 +176,71 @@ int main(int argc, char *argv[]) {
 
     const char *script = argv[1];
     //TODO: 补充处理脚本的核心逻辑，注意使用上述定义的各项工具函数
-    
+    int fd = open(script, O_RDONLY);
+    if (fd < 0) {
+        printf("[runscript] open failed\n");
+        exit(1);
+    }
+
+    struct line_reader lr;
+    lr_init(&lr, fd);
+    char line[MAXLINE];
+    char *args[MAXARGS+1];
+    while (1) {
+        int ret = lr_readline(&lr, line, sizeof(line));
+        if (ret == 0) {
+            break;
+        } else if (ret == -1) {
+            printf("[runscript] read failed\n");
+            close(fd);
+            exit(1);
+        } else if (ret == -2) {
+            printf("[runscript] line too long\n");
+            close(fd);
+            exit(1);
+        }
+
+        int nargs = prepare_argv(line, args, MAXARGS + 1);
+        if (nargs < 0) {
+            printf("[runscript] too many arguments\n");
+            close(fd);
+            exit(1);
+        } else if (nargs == 0) {
+            continue;
+        }
+
+        char path[MAXLINE];
+        if (makepath(args[0], path, sizeof(path)) < 0) {
+            printf("[runscript] cmd path too long\n");
+            close(fd);
+            exit(1);
+        }
+
+        int pid = fork();
+        if (pid < 0) {
+            printf("[runscript] fork failed\n");
+            close(fd);
+            exit(1);
+        } else if (pid == 0) {
+            exec(path, args);
+            printf("[runscript] exec %s failed\n", args[0]);
+            close(fd);
+            exit(1);
+        } else {
+            int status;
+            if (wait(&status) < 0) {
+                printf("[runscript] wait failed\n");
+                close(fd);
+                exit(1);
+            }
+            if (status != 0) {
+                printf("[runscript] cmd %s exited with status %d\n", args[0], status);
+                close(fd);
+                exit(1);
+            }
+        }
+    }
+
+    close(fd);
     exit(0);
 }
