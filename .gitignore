@@ -1,0 +1,8 @@
+ref
+build
+models
+.cache
+.vscode
+kernel.elf
+compiler_commands.json
+fs.img
