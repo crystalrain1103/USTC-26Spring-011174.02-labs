@@ -74,11 +74,24 @@ static int prefix_cache_plan_copy(
      * 4. 计算要复制的 prefix 元素数 prefix_elems = prefix_len * elems_per_pos。
      * 5. 通过 out 指针把 layer_span / prefix_elems 返回，并返回修正后的 prefix_len。
      */
-    (void)cfg;
-    (void)prefix_len;
-    (void)layer_span_out;
-    (void)prefix_elems_out;
-    return 0;
+    
+    if (prefix_len < 0) {
+        prefix_len = 0;
+    } else if (prefix_len > cfg->runtime_seq_len) {
+        prefix_len = cfg->runtime_seq_len;
+    }
+
+    uint64 elems_per_pos = (uint64)cfg->n_kv_heads * (uint64)cfg->head_dim;
+    uint64 layer_span = (uint64)cfg->runtime_seq_len * elems_per_pos;
+    uint64 prefix_elems = (uint64)prefix_len * elems_per_pos;
+
+    if (layer_span_out != 0) {
+        *layer_span_out = layer_span;
+    }
+    if (prefix_elems_out != 0) {
+        *prefix_elems_out = prefix_elems;
+    }
+    return prefix_len;
 }
 
 static void __attribute__((unused))
@@ -100,8 +113,12 @@ prefix_cache_copy_prefix_slice(float *dst, const float *src, const struct model_
      * - 只复制 prefix_elems 个 float；
      * - 不要把整层 runtime_seq_len 都复制过去。
      */
-    (void)layer_span;
-    (void)prefix_elems;
+
+    uint copy_bytes = (uint)(prefix_elems * sizeof(float));
+    for (int l = 0; l < cfg->n_layers; l++) {
+        uint64 layer_off = (uint64)l * layer_span;
+        memcpy(dst + layer_off, src + layer_off, copy_bytes);
+    }
 }
 
 static void __attribute__((unused)) clear_kv_cache_from(float *cache, const struct model_cfg *cfg, int start_pos) {
@@ -231,15 +248,19 @@ static int prefix_cache_try_restore(struct daemon_runtime *dr, int token_count, 
      *
      * 建议优先复用上面的 prefix_cache_copy_prefix_slice() 和 clear_kv_cache_from()。
      */
-    (void)dr;
-    (void)resume_pos_out;
 
-    /*
-     * 当前 start code 故意不执行真正的恢复逻辑；
-     * 即使检测到可复用前缀，也会安全回退到冷启动路径。
-     */
-    pc->misses++;
-    return 0;
+    memcpy(dr->rt.seq, dr->rt.prompt, (uint)((uint64)token_count * sizeof(uint32)));
+    prefix_cache_copy_prefix_slice(dr->kcache, pc->cached_kcache, &dr->rt.cfg, reuse_len);
+    prefix_cache_copy_prefix_slice(dr->vcache, pc->cached_vcache, &dr->rt.cfg, reuse_len);
+    clear_kv_cache_from(dr->kcache, &dr->rt.cfg, reuse_len);
+    clear_kv_cache_from(dr->vcache, &dr->rt.cfg, reuse_len);
+
+    if (resume_pos_out != 0) {
+        *resume_pos_out = reuse_len;
+    }
+    pc->hits++;
+    pc->restores++;
+    return reuse_len;
 }
 
 static void prefix_cache_save_after_prefill(struct daemon_runtime *dr) {
@@ -278,7 +299,9 @@ static void prefix_cache_save_after_prefill(struct daemon_runtime *dr) {
      * 当前框架已经把 snapshot 的保存时机放在 prompt prefill 结束之后了，
      * 你只需要补全具体的 KV 拷贝逻辑即可。
      */
-    (void)dr;
+
+    prefix_cache_copy_prefix_slice(pc->cached_kcache, dr->kcache, &rt->cfg, save_prefix_len);
+    prefix_cache_copy_prefix_slice(pc->cached_vcache, dr->vcache, &rt->cfg, save_prefix_len);
 
     /*
      * 背后的原因是：如果等完整冷启动 decode 结束后再保存，
