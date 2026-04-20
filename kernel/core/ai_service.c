@@ -314,6 +314,7 @@ int ai_service_worker_register(void) {
 
     aisvc.worker_pid = p->pid;
     aisvc.worker_online = 1;
+    wakeup(&aisvc.qcount);
 
     release(&aisvc.lock);
     return 0;
@@ -479,8 +480,18 @@ int ai_service_worker_complete(int reqid, uint64 out_uva, int out_len, int statu
             return -1;
         }
 
+        release(&aisvc.lock);
         char temp[AI_MAX_RESULT + 1];
-        if (copyin(p->pagetable, temp, out_uva, (uint64)out_len) < 0) {
+        int flag = copyin(p->pagetable, temp, out_uva, (uint64)out_len);
+        temp[out_len] = '\0';
+        acquire(&aisvc.lock);
+        req = ai_find_req_by_id_locked(reqid);
+        if (req == 0 || req->state != AIREQ_RUNNING) {
+            release(&aisvc.lock);
+            return -1;
+        }
+
+        if (flag < 0) {
             req->err = -1;
             req->result_len = 0;
             req->state = AIREQ_FAILED;
@@ -488,7 +499,7 @@ int ai_service_worker_complete(int reqid, uint64 out_uva, int out_len, int statu
             release(&aisvc.lock);
             return -1;
         }
-        temp[out_len] = '\0';
+
 
         req->err = 0;
         req->result_len = out_len;
@@ -504,7 +515,7 @@ int ai_service_worker_complete(int reqid, uint64 out_uva, int out_len, int statu
     req->state = AIREQ_FAILED;
     wakeup(req);
     release(&aisvc.lock);
-    return 0;
+    return -1;
 }
 
 void ai_service_proc_exit(int pid) {
