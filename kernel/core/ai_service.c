@@ -481,9 +481,8 @@ int ai_service_worker_complete(int reqid, uint64 out_uva, int out_len, int statu
         }
 
         release(&aisvc.lock);
-        char temp[AI_MAX_RESULT + 1];
-        int flag = copyin(p->pagetable, temp, out_uva, (uint64)out_len);
-        temp[out_len] = '\0';
+        int flag = copyin(p->pagetable, result, out_uva, (uint64)out_len);
+        result[out_len] = '\0';
         acquire(&aisvc.lock);
         req = ai_find_req_by_id_locked(reqid);
         if (req == 0 || req->state != AIREQ_RUNNING) {
@@ -503,7 +502,7 @@ int ai_service_worker_complete(int reqid, uint64 out_uva, int out_len, int statu
 
         req->err = 0;
         req->result_len = out_len;
-        memmove(req->result, temp, (uint64)out_len + 1);
+        memmove(req->result, result, (uint64)out_len + 1);
         req->state = AIREQ_DONE;
         wakeup(req);
         release(&aisvc.lock);
@@ -656,7 +655,7 @@ int ai_service_call(uint64 token_uva, int token_count, int predict_count, uint64
      *     if (reqid < 0) return -1;
      *     return ai_service_wait(reqid, out_uva, out_cap);
      */
-    
+
     int reqid = ai_service_submit(token_uva, token_count, predict_count);
     if (reqid < 0) {
         return -1;
