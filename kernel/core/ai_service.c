@@ -477,7 +477,7 @@ int ai_service_worker_complete(int reqid, uint64 out_uva, int out_len, int statu
             req->state = AIREQ_FAILED;
             wakeup(req);
             release(&aisvc.lock);
-            return -1;
+            return 0;
         }
 
         release(&aisvc.lock);
@@ -496,7 +496,7 @@ int ai_service_worker_complete(int reqid, uint64 out_uva, int out_len, int statu
             req->state = AIREQ_FAILED;
             wakeup(req);
             release(&aisvc.lock);
-            return -1;
+            return 0;
         }
 
 
@@ -514,7 +514,7 @@ int ai_service_worker_complete(int reqid, uint64 out_uva, int out_len, int statu
     req->state = AIREQ_FAILED;
     wakeup(req);
     release(&aisvc.lock);
-    return -1;
+    return 0;
 }
 
 void ai_service_proc_exit(int pid) {
