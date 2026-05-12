@@ -129,11 +129,30 @@ void usertrap(void) {
             int handled = 0;
 #if COW_ALLOC
             if (code == STORE_PAGE_FAULT) {
-                // TODO: Detect and resolve writes to COW pages.
-                //
-                // Only a real COW store fault should be handled here. Other
-                // page faults must fall through to the lazy/mmap handler below.
-                // If COW handling fails, mark this process as killed.
+                // TODO:[Lazy allocation]: try zero-fill-on-demand heap allocation before
+                // treating the fault as an invalid access, you should call user_lazy_alloc() to attempt to handle this page fault via lazy allocation.
+                uint64 va0 = PGROUNDDOWN(fault_va);
+                pte_t *pte = (fault_va < MAXVA) ? walk(p->pagetable, va0, 0) : 0;
+                if (pte != 0 && (*pte & (PTE_V | PTE_U | PTE_COW)) == (PTE_V | PTE_U | PTE_COW)) {
+                    uint64 pa = PTE2PA(*pte);
+                    uint64 flags = (PTE_FLAGS(*pte) | PTE_W) & ~PTE_COW;
+
+                    handled = 1;
+                    if (kgetref((void *)pa) <= 1) {
+                        *pte = PA2PTE(pa) | flags;
+                        sfence_vma();
+                    } else {
+                        void *mem = kalloc();
+                        if (mem == 0) {
+                            p->killed = 1;
+                        } else {
+                            memmove(mem, (void *)pa, PGSIZE);
+                            *pte = PA2PTE(mem) | flags;
+                            sfence_vma();
+                            kfree((void *)pa);
+                        }
+                    }
+                }
             }
 #endif
 
@@ -142,7 +161,9 @@ void usertrap(void) {
                 //
                 // Invalid addresses and protection faults should kill only the
                 // faulting process, not panic the kernel.
-                (void) fault_va;
+                if (proc_handle_page_fault(fault_va, code == STORE_PAGE_FAULT) != 0) {
+                    p->killed = 1;
+                }
             }
         } else {
             printf("[usertrap] scause=%p sepc=%p stval=%p\n", scause, r_sepc(), r_stval());

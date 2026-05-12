@@ -110,8 +110,10 @@ static uint64 sys_sbrk(void) {
         // eager path, then update p->sz only after validation succeeds.
         // Temporary fallback: keep sbrk functional, but this is eager and will
         // not pass the lazy-allocation tests.
-        if (growproc(n) < 0)
-            return (uint64)-1;
+        uint64 newsz = addr + (uint64)n;
+        if (newsz < addr || newsz > proc_mmap_limit(p))
+            return -1;
+        p->sz = newsz;
     } else if (n < 0) {
         // TODO: Implement shrinking.
         //
@@ -119,7 +121,8 @@ static uint64 sys_sbrk(void) {
         // released immediately, including ranges that may contain lazy holes.
         //
         // Temporary stub: fail gracefully until this path is implemented.
-        return (uint64)-1;
+        if (growproc(n)<0)
+            return (uint64)-1;
     } else {
         // Eager allocation : allocate physical memory now.
         if (growproc(n) < 0)

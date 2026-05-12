@@ -30,19 +30,22 @@ static int ref_cnt[PHYSTOP / PGSIZE];
 
 // Increase the reference count for a physical page.
 void kaddref(void *pa) {
-    (void)pa;
     // TODO: [COW] Record one additional owner of this physical page.
     // Concurrent fork/exit paths must not race with this metadata update.
-
+    acquire(&ref_lock);
+    ref_cnt[(uint64)pa / PGSIZE]++;
+    release(&ref_lock);
 }
 
 // Get the reference count for a physical page.
 int kgetref(void *pa) {
-    (void)pa;
     // TODO: [COW] Return how many address-space mappings still own this page.
     // The COW fault path uses this to decide whether copying is necessary.
-
-    return 1;
+    int n;
+    acquire(&ref_lock);
+    n = ref_cnt[(uint64)pa / PGSIZE];
+    release(&ref_lock);
+    return n;
 }
 #else
 // Stubs when COW is disabled.
@@ -63,7 +66,17 @@ void kfree(void *pa) {
     // TODO: [COW] Release one owner of this physical page.
     // A page that is still shared must not be returned to the freelist. Only
     // the last release should continue to the normal free path below.
-
+    acquire(&ref_lock);
+    int *ref = &ref_cnt[a / PGSIZE];
+    if (*ref > 1) {
+        --*ref;
+        release(&ref_lock);
+        return;
+    }
+    if (*ref == 1) {
+        *ref = 0;
+    }
+    release(&ref_lock);
 #endif
 
     // Fill with junk to catch dangling refs.
@@ -109,7 +122,9 @@ void *kalloc(void) {
         memset((void *)r, 5, PGSIZE);
 #if COW_ALLOC
         // TODO: [COW] A freshly allocated physical page starts with one owner.
-
+        acquire(&ref_lock);
+        ref_cnt[(uint64)r / PGSIZE] = 1;
+        release(&ref_lock);
 #endif
         LOG_DEBUG("Allocated physical page at %p", r); // [埋点]
     } else {
