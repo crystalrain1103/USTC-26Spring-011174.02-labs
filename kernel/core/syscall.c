@@ -121,7 +121,7 @@ static uint64 sys_sbrk(void) {
         // released immediately, including ranges that may contain lazy holes.
         //
         // Temporary stub: fail gracefully until this path is implemented.
-        if (growproc(n) < 0)
+        if (growproc(n)<0)
             return (uint64)-1;
     } else {
         // Eager allocation : allocate physical memory now.

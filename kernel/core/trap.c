@@ -131,8 +131,27 @@ void usertrap(void) {
             if (code == STORE_PAGE_FAULT) {
                 // TODO:[Lazy allocation]: try zero-fill-on-demand heap allocation before
                 // treating the fault as an invalid access, you should call user_lazy_alloc() to attempt to handle this page fault via lazy allocation.
-                if (user_lazy_alloc(p, p->pagetable, fault_va) == 0) {
+                uint64 va0 = PGROUNDDOWN(fault_va);
+                pte_t *pte = (fault_va < MAXVA) ? walk(p->pagetable, va0, 0) : 0;
+                if (pte != 0 && (*pte & (PTE_V | PTE_U | PTE_COW)) == (PTE_V | PTE_U | PTE_COW)) {
+                    uint64 pa = PTE2PA(*pte);
+                    uint64 flags = (PTE_FLAGS(*pte) | PTE_W) & ~PTE_COW;
+
                     handled = 1;
+                    if (kgetref((void *)pa) <= 1) {
+                        *pte = PA2PTE(pa) | flags;
+                        sfence_vma();
+                    } else {
+                        void *mem = kalloc();
+                        if (mem == 0) {
+                            p->killed = 1;
+                        } else {
+                            memmove(mem, (void *)pa, PGSIZE);
+                            *pte = PA2PTE(mem) | flags;
+                            sfence_vma();
+                            kfree((void *)pa);
+                        }
+                    }
                 }
             }
 #endif
