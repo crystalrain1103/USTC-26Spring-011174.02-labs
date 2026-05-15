@@ -122,18 +122,19 @@ static int should_lazy_alloc(struct proc *p, pagetable_t pagetable, uint64 va) {
     //
     // Return 1 if the kernel should allocate a zero-filled page for va.
     // Return 0 if the fault should be treated as invalid.
+    uint64 page = PGROUNDDOWN(va);
 
-    if (p == 0 || pagetable == 0 || va >= p->sz || va >= proc_mmap_limit(p) || va >= TRAPFRAME || va >= MAXVA)
+    if (p == 0 || pagetable == 0 || page >= p->sz || page >= proc_mmap_limit(p) || page >= TRAPFRAME || page >= MAXVA)
         return 0;
 
     if (p->trapframe && p->trapframe->sp >= PGSIZE) {
         uint64 sp = p->trapframe->sp;
         uint64 guard = PGROUNDDOWN(sp) - PGSIZE;
-        if (va == guard)
+        if (page == guard)
             return 0;
     }
 
-    pte_t *pte = walk(pagetable, va, 0);
+    pte_t *pte = walk(pagetable, page, 0);
     if (pte && (*pte & PTE_V))
         return 0;
 
@@ -507,6 +508,7 @@ int copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len) {
         // If the destination page is a COW mapping, resolve it before writing
         // through pa0. The physical page used for the final memmove() must be
         // the current private writable page.
+
         if (*pte & PTE_COW) {
             if (cow_handle_fault(pagetable, va0) < 0) {
                 return -1;
