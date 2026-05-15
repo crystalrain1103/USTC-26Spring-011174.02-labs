@@ -123,17 +123,18 @@ static int should_lazy_alloc(struct proc *p, pagetable_t pagetable, uint64 va) {
     // Return 1 if the kernel should allocate a zero-filled page for va.
     // Return 0 if the fault should be treated as invalid.
 
-    if (p == 0 || pagetable == 0 || va >= p->sz || va >= proc_mmap_limit(p) || va >= TRAPFRAME || va >= MAXVA)
+    uint64 page = PGROUNDDOWN(va);
+    if (p == 0 || pagetable == 0 || page >= p->sz || page >= proc_mmap_limit(p) || page >= TRAPFRAME || page >= MAXVA)
         return 0;
 
     if (p->trapframe && p->trapframe->sp >= PGSIZE) {
         uint64 sp = p->trapframe->sp;
         uint64 guard = PGROUNDDOWN(sp) - PGSIZE;
-        if (va == guard)
+        if (page == guard)
             return 0;
     }
 
-    pte_t *pte = walk(pagetable, va, 0);
+    pte_t *pte = walk(pagetable, page, 0);
     if (pte && (*pte & PTE_V))
         return 0;
 
